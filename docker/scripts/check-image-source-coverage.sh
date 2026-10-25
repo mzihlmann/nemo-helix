@@ -24,10 +24,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
-docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "${syft_image}" \
-    "docker:${image_ref}" -o syft-json -q > "${work_dir}/sbom.json"
-
 container="$(docker create "${image_ref}" true)"
+
+# kaniko ships SPDX documents for the static components no syft cataloger recognizes, tini and its glibc among them.
+syft_args=()
+if docker cp -q "${container}:/kaniko/sbom" "${work_dir}/embedded-sbom" 2>/dev/null; then
+    syft_args+=(--select-catalogers +sbom-cataloger)
+fi
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "${syft_image}" \
+    "docker:${image_ref}" "${syft_args[@]}" -o syft-json -q > "${work_dir}/sbom.json"
+
 for source_root in /usr/share/nemo-helix/source-distributions /kaniko/source-distributions; do
     if docker cp -q "${container}:${source_root}/${image_name}" "${work_dir}/sources" 2>/dev/null; then
         break

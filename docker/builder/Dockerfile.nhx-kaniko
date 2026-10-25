@@ -13,20 +13,24 @@ ARG NHX_PYTHON_BASE=nhx-python-base
 
 FROM ghcr.io/osscontainertools/kaniko:${KANIKO_VERSION}-debug@sha256:350929376b8a69afb1d8b362086c809e4ef6799fa1bcb317c2806ae1447b3845 AS kaniko
 
-# The image has no Python, so its sources are collected here. docker/sources/nhx-kaniko.json pins the
-# components its Go binaries don't record: kaniko itself; BusyBox with the patches and build script
-# Docker builds it with, and Alpine 3.23's musl package it links statically; tini's release binaries
-# and the Ubuntu xenial glibc they link statically (glibc 2.23-0ubuntu10 on amd64, and on arm64 the
-# 2.23-0ubuntu3 that cross-toolchain-base 10ubuntu1 built); and Debian trixie's ca-certificates, from
-# which the CA bundle is generated. Re-check it whenever the digest above moves.
+# The image has no Python, so its sources are collected here, for the components its Go binaries
+# don't record. The SPDX documents in /kaniko/sbom pin BusyBox and the Alpine 3.23 musl it links
+# statically, and tini with the Ubuntu xenial glibc it links statically, for the image's platform.
+# docker/sources/nhx-kaniko.json pins the rest: kaniko itself, the patches and build script Docker
+# builds BusyBox with, and Alpine's musl patches. Debian trixie's ca-certificates, from which the CA
+# bundle is generated, come from apt. Re-check the manifest whenever the digest above moves.
 FROM ${NHX_PYTHON_BASE} AS sources
 ARG NHX_COLLECT_SOURCES=0
 ENV NHX_COLLECT_SOURCES=${NHX_COLLECT_SOURCES}
 COPY docker/sources/nhx-kaniko.json /tmp/nhx-kaniko.json
+COPY --from=kaniko /kaniko/sbom/ /tmp/kaniko-sbom/
 COPY --from=kaniko /kaniko/executor /kaniko/warmer /kaniko/docker-credential-gcr \
     /kaniko/docker-credential-ecr-login /kaniko/docker-credential-acr-env /tmp/kaniko/
 RUN python3 /usr/local/bin/collect-pinned-sources.py \
         --manifest /tmp/nhx-kaniko.json \
+        --spdx /tmp/kaniko-sbom/busybox.spdx.json \
+        --spdx /tmp/kaniko-sbom/tini.spdx.json \
+        --skip-spdx-package docker-library-busybox \
         --output /source-distributions/nhx-kaniko && \
     bash /usr/local/bin/collect-apt-sources.sh /source-distributions/nhx-kaniko/apt ca-certificates && \
     python3 /usr/local/bin/collect-go-module-sources.py \
