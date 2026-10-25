@@ -35,14 +35,6 @@ RESULT_MARKER = "NHX_IMAGE_RESULT"
 
 KANIKO_EXECUTOR = "/kaniko/executor"
 
-#: The osscontainertools fork's feature flags, pinned with its image: it reads them from the environment, and
-#: falls back to its default on a bad value without a word. Without these two, `--reproducible` writes a Docker
-#: v2s2 manifest and re-tars every base layer, rather than keeping the base's OCI format and layer digests.
-KANIKO_FEATURE_FLAGS = {
-    "FF_KANIKO_REPRODUCIBLE_PRESERVE_FORMAT": "true",
-    "FF_KANIKO_REPRODUCIBLE_PRESERVE_BASE_LAYERS": "true",
-}
-
 _POD_TIMEOUT_SECONDS = 60 * 60
 
 #: Enforced by the kubelet, so a sandbox ends even if this step is killed before it can delete it.
@@ -155,7 +147,6 @@ def _pod_manifest(
                     name="build",
                     image=sandbox.image,
                     command=["/busybox/sh", "-c", _build_script(group, sandbox)],
-                    env=[k8s.V1EnvVar(name=name, value=value) for name, value in KANIKO_FEATURE_FLAGS.items()],
                     security_context=k8s.V1SecurityContext(
                         # kaniko needs root to unpack layers whose files belong to many uids.
                         run_as_user=0,
